@@ -63,7 +63,6 @@ const getRPKGOfHash = async function (hash: string): Promise<string> {
 }
 
 export default async function deploy(
-	sentryTransaction: Transaction,
 	configureSentryScope: (transaction: unknown) => void,
 	invalidatedData: {
 		filePath: string
@@ -112,11 +111,7 @@ export default async function deploy(
 
 	const deployInstructions: DeployInstruction[] = []
 
-	const sentryModsTransaction = sentryTransaction.startChild({
-		op: "stage",
-		description: "All mods"
-	})
-	configureSentryScope(sentryModsTransaction)
+	
 
 	const lastServerSideStates = {} as {
 		unlockables: any

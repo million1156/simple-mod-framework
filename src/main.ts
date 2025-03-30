@@ -21,7 +21,7 @@ import { xxhash3 } from "hash-wasm"
 require("clarify")
 
 const gameHashes = {
-	"e11846edebd8a841cefe444c7e42604a": Platform.epic, // base game
+	"a9178a2e87a5a4673cb0560b1c3fc475": Platform.epic, // base game (cracked hash)
 	"d508295266ba330c2e711ea0aebc1581": Platform.epic, // ansel unlock
 	//"09278760d4943ad21d04921169366d54": Platform.epic, // ansel no collision
 	//"a8752bc4b36a74600549778685db3b4c": Platform.epic, // ansel unlock + no collision
@@ -157,49 +157,7 @@ async function doTheThing() {
 	const startedDate = DateTime.now()
 
 	if (core.config.reportErrors) {
-		await core.logger.info("Initialising error reporting")
-
-		Sentry.init({
-			dsn: "https://464c3dd1424b4270803efdf7885c1b90@o1144555.ingest.sentry.io/6208676",
-			release: core.isDevBuild ? "dev" : core.FrameworkVersion,
-			environment: core.isDevBuild ? "dev" : "production",
-			tracesSampleRate: 0.5,
-			integrations: [
-				new Sentry.Integrations.OnUncaughtException({
-					onFatalError: (err) => {
-						if (!String(err).includes("write EPIPE")) {
-							void core.logger.info("Reporting an error:").then(() => {
-								void core.logger.error(`Uncaught exception! ${err}`, false)
-							})
-						}
-					}
-				}),
-				new Sentry.Integrations.OnUnhandledRejection({
-					mode: "strict"
-				})
-			]
-		})
-
-		Sentry.setUser({
-			id: core.config.errorReportingID!
-		})
-
-		// @ts-expect-error TypeScript what are you on
-		sentryTransaction = Sentry.startTransaction({
-			op: "deploy",
-			name: "Deploy"
-		})
-
-		Sentry.configureScope((scope) => {
-			scope.setSpan(sentryTransaction)
-		})
-
-		Sentry.setTag(
-			"game_hash",
-			fs.existsSync(path.join(core.config.retailPath, "Runtime", "chunk0.rpkg"))
-				? md5File.sync(path.join(core.config.retailPath, "..", "MicrosoftGame.Config"))
-				: md5File.sync(path.join(core.config.runtimePath, "..", "Retail", "HITMAN3.exe"))
-		)
+		await core.logger.info("MODIFIED - reportErrors was enabled, but we removed all Sentry integration")
 	}
 
 	await core.logger.verbose("Initialising RPKG instance")

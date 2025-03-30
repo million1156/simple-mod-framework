@@ -1,5 +1,5 @@
 const FrameworkVersion = "2.33.24"
-const isDevBuild = false
+const isDevBuild = true
 
 import * as Sentry from "@sentry/node"
 
@@ -92,10 +92,8 @@ const logger = args["--useConsoleLogging"]
 
 				if (exitAfter) {
 					if (config.reportErrors) {
-						Sentry.getCurrentHub().getScope()!.getTransaction()!.finish()
+						await core.logger.info("MODIFIED - reportErrors was enabled, but we removed all Sentry integration")
 					}
-
-					await Sentry.close()
 
 					rpkgInstance.exit()
 					try {
@@ -196,11 +194,8 @@ const logger = args["--useConsoleLogging"]
 
 					if (exitAfter) {
 						if (config.reportErrors) {
-							Sentry.getCurrentHub().getScope()!.getTransaction()!.finish()
+							await core.logger.info("MODIFIED - reportErrors was enabled, but we removed all Sentry integration")
 						}
-
-						await Sentry.close()
-
 						rpkgInstance.exit()
 						try {
 							// @ts-expect-error Assigning stuff on global is probably bad practice
@@ -221,11 +216,8 @@ export default {
 	args,
 	cleanExit: async () => {
 		if (config.reportErrors) {
-			Sentry.getCurrentHub().getScope()!.getTransaction()!.finish()
+			await core.logger.info("MODIFIED - reportErrors was enabled, but we removed all Sentry integration")
 		}
-
-		await Sentry.close()
-
 		rpkgInstance.exit()
 		try {
 			// @ts-expect-error Assigning stuff on global is probably bad practice
