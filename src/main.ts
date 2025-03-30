@@ -1,12 +1,9 @@
 // @ts-expect-error Need to assign on global because of QuickEntity
 global.THREE = require("./three-onlymath.min")
 
-import * as Sentry from "@sentry/node"
-import * as Tracing from "@sentry/tracing"
 import * as LosslessJSON from "lossless-json"
 
 import { DateTime, Duration, DurationLikeObject } from "luxon"
-import type { Span, Transaction } from "@sentry/tracing"
 
 import { Platform } from "./types"
 import core from "./core-singleton"
@@ -86,51 +83,7 @@ core.config.platform = fs.existsSync(path.join(core.config.retailPath, "Runtime"
 	? gameHashes[md5File.sync(path.join(core.config.retailPath, "..", "MicrosoftGame.Config"))]
 	: gameHashes[md5File.sync(path.join(core.config.runtimePath, "..", "Retail", "HITMAN3.exe"))] // Platform detection
 
-let sentryTransaction = {
-	startChild(...args) {
-		return {
-			startChild(...args) {
-				return {
-					startChild(...args) {
-						return {
-							startChild(...args) {
-								return {
-									startChild(...args) {
-										return {
-											startChild(...args) {
-												return {
-													startChild(...args) {
-														return {
-															finish(...args) {}
-														}
-													},
-													finish(...args) {}
-												}
-											},
-											finish(...args) {}
-										}
-									},
-									finish(...args) {}
-								}
-							},
-							finish(...args) {}
-						}
-					},
-					finish(...args) {}
-				}
-			},
-			finish(...args) {}
-		}
-	},
-	finish(...args) {}
-} as Transaction
 
-function configureSentryScope(transaction: Span) {
-	if (core.config.reportErrors)
-		Sentry.configureScope((scope) => {
-			scope.setSpan(transaction)
-		})
-}
 
 function toHuman(dur: Duration) {
 	const units: (keyof DurationLikeObject)[] = ["years", "months", "days", "hours", "minutes", "seconds", "milliseconds"]
@@ -214,7 +167,7 @@ async function doTheThing() {
 	})
 
 	await core.logger.verbose("Beginning deploy")
-	const { lastServerSideStates } = (await deploy(sentryTransaction, configureSentryScope, invalidData))!
+	const { lastServerSideStates } = (await deploy(invalidData))!
 
 	await core.logger.verbose("Finishing")
 
