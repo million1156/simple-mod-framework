@@ -11,7 +11,6 @@ import { copyFromCache, copyToCache, extractOrCopyToTemp, getQuickEntityFromPatc
 
 import { OptionType } from "./types"
 import Piscina from "piscina"
-import type { Transaction } from "@sentry/tracing"
 import child_process from "child_process"
 import { crc32 } from "./crc32"
 import fs from "fs-extra"
@@ -63,7 +62,6 @@ const getRPKGOfHash = async function (hash: string): Promise<string> {
 }
 
 export default async function deploy(
-	configureSentryScope: (transaction: unknown) => void,
 	invalidatedData: {
 		filePath: string
 		data: { hash: string; dependencies: string[]; affected: string[] }
@@ -150,12 +148,6 @@ export default async function deploy(
 		} // Essentially, if the mod isn't an RPKG mod, it is referenced by its ID, so this finds the mod folder with the right ID
 
 		if (!fs.existsSync(path.join(process.cwd(), "Mods", mod, "manifest.json"))) {
-			const sentryModTransaction = sentryModsTransaction.startChild({
-				op: "stage",
-				description: mod
-			})
-			configureSentryScope(sentryModTransaction)
-
 			await logger.info(`Staging RPKG mod: ${mod}`)
 
 			for (const chunkFolder of fs.readdirSync(path.join(process.cwd(), "Mods", mod))) {
@@ -184,24 +176,14 @@ export default async function deploy(
 				fs.emptyDirSync(path.join(process.cwd(), "temp"))
 			}
 
-			sentryModTransaction.finish()
 		} else {
 			const manifest: Manifest = json5.parse(fs.readFileSync(path.join(process.cwd(), "Mods", mod, "manifest.json"), "utf8"))
 
-			const sentryModTransaction = sentryModsTransaction.startChild({
-				op: "analyse",
-				description: manifest.id
-			})
-			configureSentryScope(sentryModTransaction)
+			
 
 			await logger.info(`Analysing framework mod: ${manifest.name}`)
 
-			const sentryDiskAnalysisTransaction = sentryModTransaction.startChild({
-				op: "analyse",
-				description: "Disk analysis"
-			})
-			configureSentryScope(sentryDiskAnalysisTransaction)
-
+		
 			let contentFolders: string[] = []
 			let blobsFolders: string[] = []
 
@@ -363,15 +345,8 @@ export default async function deploy(
 				rpkgTypes
 			}
 
-			sentryDiskAnalysisTransaction.finish()
 
 			if (deployInstruction.manifestSources.scripts.length) {
-				const sentryScriptsTransaction = sentryModTransaction.startChild({
-					op: "analyse",
-					description: "analysis scripts"
-				})
-				configureSentryScope(sentryScriptsTransaction)
-
 				for (const files of deployInstruction.manifestSources.scripts) {
 					ts.compile(
 						files.map((a) => path.join(process.cwd(), "Mods", mod, a)),
@@ -434,12 +409,9 @@ export default async function deploy(
 					fs.removeSync(path.join(process.cwd(), "compiled"))
 				}
 
-				sentryScriptsTransaction.finish()
 			}
 
 			deployInstructions.push(deployInstruction)
-
-			sentryModTransaction.finish()
 		}
 	}
 
@@ -447,22 +419,10 @@ export default async function deploy(
 	/*                                      Execute instructions                                      */
 	/* ---------------------------------------------------------------------------------------------- */
 	for (const instruction of deployInstructions) {
-		const sentryModTransaction = sentryModsTransaction.startChild({
-			op: "stage",
-			description: instruction.id
-		})
-		configureSentryScope(sentryModTransaction)
-
 		await logger.info(`Deploying ${instruction.id}`)
 
 		if (instruction.manifestSources.scripts.length) {
 			await logger.verbose("beforeDeploy scripts")
-
-			const sentryScriptsTransaction = sentryModTransaction.startChild({
-				op: "stage",
-				description: "beforeDeploy scripts"
-			})
-			configureSentryScope(sentryScriptsTransaction)
 
 			for (const files of instruction.manifestSources.scripts) {
 				await logger.verbose(`Executing script: ${files[0]}`)
@@ -526,7 +486,6 @@ export default async function deploy(
 				fs.removeSync(path.join(process.cwd(), "compiled"))
 			}
 
-			sentryScriptsTransaction.finish()
 		}
 
 		lastServerSideStates.peacockPlugins ??= []
@@ -547,11 +506,6 @@ export default async function deploy(
 		/* ---------------------------------------------------------------------------------------------- */
 		/*                                             Content                                            */
 		/* ---------------------------------------------------------------------------------------------- */
-		const sentryContentTransaction = sentryModTransaction.startChild({
-			op: "stage",
-			description: "Content"
-		})
-		configureSentryScope(sentryContentTransaction)
 
 		instruction.content.sort((a, b) =>
 			(a.order || (a.source === "disk" ? a.chunk + a.path : a.chunk + a.identifier)).localeCompare(b.order || (b.source === "disk" ? b.chunk + b.path : b.chunk + b.identifier), "en-AU", {
@@ -611,62 +565,7 @@ export default async function deploy(
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			let entityContent: any
 
-			const sentryContentFileTransaction = [
-				"entity.json",
-				"entity.patch.json",
-				"unlockables.json",
-				"repository.json",
-				"contract.json",
-				"JSON.patch.json",
-				"material.json",
-				"texture.tga",
-				"sfx.wem",
-				"delta",
-				"locr.json"
-			].includes(content.type)
-				? sentryContentTransaction.startChild({
-						op: "stageContentFile",
-						description: `Stage ${content.type}`
-				  })
-				: {
-						startChild() {
-							return {
-								startChild() {
-									return {
-										startChild() {
-											return {
-												startChild() {
-													return {
-														startChild() {
-															return {
-																startChild() {
-																	return {
-																		startChild() {
-																			return {
-																				finish() {}
-																			}
-																		},
-																		finish() {}
-																	}
-																},
-																finish() {}
-															}
-														},
-														finish() {}
-													}
-												},
-												finish() {}
-											}
-										},
-										finish() {}
-									}
-								},
-								finish() {}
-							}
-						},
-						finish() {}
-				  } // Don't track raw files, only special file types
-			configureSentryScope(sentryContentFileTransaction)
+		
 
 			content.source === "disk" && logger.verbose(`Staging ${content.type} file ${content.path}`)
 			content.source === "virtual" && logger.verbose(`Staging virtual ${content.type} file ${content.identifier}`)
@@ -1691,8 +1590,6 @@ export default async function deploy(
 					break
 			}
 
-			sentryContentFileTransaction.finish()
-
 			fs.emptyDirSync(path.join(process.cwd(), "temp"))
 		}
 
@@ -1734,8 +1631,6 @@ export default async function deploy(
 			allRPKGTypes[rpkg] = data.type
 		}
 
-		sentryContentTransaction.finish()
-
 		/* ------------------------------------- Multithreaded patching ------------------------------------ */
 		let index = 0
 
@@ -1747,11 +1642,6 @@ export default async function deploy(
 		// @ts-expect-error Assigning stuff on global is probably bad practice
 		global.currentWorkerPool = workerPool
 
-		const sentryPatchTransaction = sentryModTransaction.startChild({
-			op: "stage",
-			description: "Patches"
-		})
-		configureSentryScope(sentryPatchTransaction)
 
 		await Promise.all(
 			entityPatches.map(({ tempHash, tempRPKG, tbluHash, tbluRPKG, chunkFolder, patches }) => {
@@ -1775,17 +1665,10 @@ export default async function deploy(
 			destroy: () => {}
 		}
 
-		sentryPatchTransaction.finish()
-
 		/* ---------------------------------------------------------------------------------------------- */
 		/*                                              Blobs                                             */
 		/* ---------------------------------------------------------------------------------------------- */
 		if (instruction.blobs.length) {
-			const sentryBlobsTransaction = sentryModTransaction.startChild({
-				op: "stage",
-				description: "Blobs"
-			})
-			configureSentryScope(sentryBlobsTransaction)
 
 			fs.emptyDirSync(path.join(process.cwd(), "temp"))
 
@@ -1876,17 +1759,11 @@ export default async function deploy(
 			fs.copyFileSync(path.join(process.cwd(), "temp", oresChunk, "ORES", "00858D45F5F9E3CA.ORES.meta"), path.join(process.cwd(), "staging", "chunk0", "00858D45F5F9E3CA.ORES.meta"))
 
 			fs.emptyDirSync(path.join(process.cwd(), "temp"))
-
-			sentryBlobsTransaction.finish()
 		}
 
 		/* ---------------------------------------- Dependencies ---------------------------------------- */
 		if (instruction.manifestSources.dependencies) {
-			const sentryDependencyTransaction = sentryModTransaction.startChild({
-				op: "stage",
-				description: "Dependencies"
-			})
-			configureSentryScope(sentryDependencyTransaction)
+		
 
 			const doneHashes: {
 				id: string
@@ -1952,8 +1829,6 @@ export default async function deploy(
 					}
 				}
 			}
-
-			sentryDependencyTransaction.finish()
 		}
 
 		/* ------------------------------------- Package definition ------------------------------------- */
@@ -1998,11 +1873,6 @@ export default async function deploy(
 		}
 
 		if (instruction.manifestSources.localisedLines) {
-			const sentryLocalisedLinesTransaction = sentryModTransaction.startChild({
-				op: "stage",
-				description: "Localised lines"
-			})
-			configureSentryScope(sentryLocalisedLinesTransaction)
 
 			for (const lineHash of Object.keys(instruction.manifestSources.localisedLines)) {
 				fs.emptyDirSync(path.join(process.cwd(), "temp", "chunk0"))
@@ -2053,18 +1923,10 @@ export default async function deploy(
 				fs.copySync(path.join(process.cwd(), "temp"), path.join(process.cwd(), "staging"))
 				fs.emptyDirSync(path.join(process.cwd(), "temp"))
 			}
-
-			sentryLocalisedLinesTransaction.finish()
 		}
 
 		if (instruction.manifestSources.scripts.length) {
 			await logger.verbose("afterDeploy scripts")
-
-			const sentryScriptsTransaction = sentryModTransaction.startChild({
-				op: "stage",
-				description: "afterDeploy scripts"
-			})
-			configureSentryScope(sentryScriptsTransaction)
 
 			for (const files of instruction.manifestSources.scripts) {
 				await logger.verbose(`Executing script: ${files[0]}`)
@@ -2127,14 +1989,9 @@ export default async function deploy(
 
 				fs.removeSync(path.join(process.cwd(), "compiled"))
 			}
-
-			sentryScriptsTransaction.finish()
 		}
-
-		sentryModTransaction.finish()
 	}
 
-	sentryModsTransaction.finish()
 
 	if (config.outputToSeparateDirectory) {
 		fs.emptyDirSync(path.join(process.cwd(), "Output"))
@@ -2144,11 +2001,6 @@ export default async function deploy(
 	/*                                      Contract destinations                                     */
 	/* ---------------------------------------------------------------------------------------------- */
 	if (contractsToAddToDestinations.length) {
-		const sentryContractDestinations = sentryTransaction.startChild({
-			op: "stage",
-			description: "Contract destinations"
-		})
-		configureSentryScope(sentryContractDestinations)
 
 		fs.emptyDirSync(path.join(process.cwd(), "temp"))
 
@@ -2207,18 +2059,11 @@ export default async function deploy(
 		fs.ensureDirSync(path.join(process.cwd(), "staging", "chunk0"))
 
 		fs.writeJSONSync(path.join(process.cwd(), "staging", "chunk0", "004F4B738474CEAD.JSON"), registry)
-
-		sentryContractDestinations.finish()
 	}
 
 	/* ---------------------------------------------------------------------------------------------- */
 	/*                                          WWEV patches                                          */
 	/* ---------------------------------------------------------------------------------------------- */
-	const sentryWWEVTransaction = sentryTransaction.startChild({
-		op: "stage",
-		description: "sfx.wem files"
-	})
-	configureSentryScope(sentryWWEVTransaction)
 
 	for (const entry of Object.entries(WWEVpatches)) {
 		await logger.debug(`Patching WWEV ${entry[0]}`)
@@ -2257,7 +2102,6 @@ export default async function deploy(
 		fs.copyFileSync(path.join(workingPath, `${WWEVhash}.WWEV.meta`), path.join(process.cwd(), "staging", entry[1][0].chunk, `${WWEVhash}.WWEV.meta`)) // Copy the WWEV and its meta
 	}
 
-	sentryWWEVTransaction.finish()
 
 	/* ---------------------------------------------------------------------------------------------- */
 	/*                                        Runtime packages                                        */
@@ -2285,11 +2129,6 @@ export default async function deploy(
 	await logger.info("Localising text")
 
 	if (localisation.length) {
-		const sentryLocalisationTransaction = sentryTransaction.startChild({
-			op: "stage",
-			description: "Localisation"
-		})
-		configureSentryScope(sentryLocalisationTransaction)
 
 		const languages = {
 			english: "en",
@@ -2369,17 +2208,9 @@ export default async function deploy(
 		fs.copyFileSync(path.join(process.cwd(), "temp", `${localisationFileRPKG}`, "LOCR", "00F5817876E691F1.LOCR.meta"), path.join(process.cwd(), "staging", "chunk0", "00F5817876E691F1.LOCR.meta"))
 
 		fs.emptyDirSync(path.join(process.cwd(), "temp"))
-
-		sentryLocalisationTransaction.finish()
 	}
 
 	if (Object.keys(localisationOverrides).length) {
-		const sentryLocalisationOverridesTransaction = sentryTransaction.startChild({
-			op: "stage",
-			description: "Localisation overrides"
-		})
-		configureSentryScope(sentryLocalisationOverridesTransaction)
-
 		const languages = {
 			english: "en",
 			french: "fr",
@@ -2458,8 +2289,6 @@ export default async function deploy(
 
 			fs.emptyDirSync(path.join(process.cwd(), "temp"))
 		}
-
-		sentryLocalisationOverridesTransaction.finish()
 	}
 
 	/* ---------------------------------------------------------------------------------------------- */
@@ -2468,11 +2297,6 @@ export default async function deploy(
 	if (config.skipIntro || thumbs.length) {
 		await logger.info("Patching thumbs")
 
-		const sentryThumbsPatchingTransaction = sentryTransaction.startChild({
-			op: "stage",
-			description: "Thumbs patching"
-		})
-		configureSentryScope(sentryThumbsPatchingTransaction)
 
 		fs.emptyDirSync(path.join(process.cwd(), "temp"))
 
@@ -2502,19 +2326,12 @@ export default async function deploy(
 			config.outputToSeparateDirectory ? path.join(process.cwd(), "Output", "thumbs.dat") : path.join(config.retailPath, "thumbs.dat")
 		) // Output thumbs
 
-		sentryThumbsPatchingTransaction.finish()
 	}
 
 	/* ---------------------------------------------------------------------------------------------- */
 	/*                                       Package definition                                       */
 	/* ---------------------------------------------------------------------------------------------- */
 	await logger.info("Patching packagedefinition")
-
-	const sentryPackagedefPatchingTransaction = sentryTransaction.startChild({
-		op: "stage",
-		description: "packagedefinition patching"
-	})
-	configureSentryScope(sentryPackagedefPatchingTransaction)
 
 	await logger.verbose("Emptying temp directory")
 	fs.emptyDirSync(path.join(process.cwd(), "temp"))
@@ -2587,19 +2404,10 @@ export default async function deploy(
 		config.outputToSeparateDirectory ? path.join(process.cwd(), "Output", "packagedefinition.txt") : path.join(config.runtimePath, "packagedefinition.txt")
 	) // Output PD
 
-	sentryPackagedefPatchingTransaction.finish()
-
 	/* ---------------------------------------------------------------------------------------------- */
 	/*                                         Generate RPKGs                                         */
 	/* ---------------------------------------------------------------------------------------------- */
 	await logger.info("Generating RPKGs")
-
-	const sentryRPKGGenerationTransaction = sentryTransaction.startChild({
-		op: "stage",
-		description: "RPKG generation"
-	})
-	configureSentryScope(sentryRPKGGenerationTransaction)
-
 	for (const stagingChunkFolder of fs.readdirSync(path.join(process.cwd(), "staging"))) {
 		await callRPKGFunction(`-generate_rpkg_quickly_from "${path.join(process.cwd(), "staging", stagingChunkFolder)}" -output_path "${path.join(process.cwd(), "staging")}"`)
 
@@ -2614,8 +2422,6 @@ export default async function deploy(
 			await logger.error("Couldn't copy the RPKG files! Make sure the game isn't running when you deploy your mods.")
 		}
 	}
-
-	sentryRPKGGenerationTransaction.finish()
 
 	fs.removeSync(path.join(process.cwd(), "staging"))
 	fs.removeSync(path.join(process.cwd(), "temp"))
