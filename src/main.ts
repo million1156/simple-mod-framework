@@ -13,12 +13,11 @@ import discover from "./discover"
 import fs from "fs-extra"
 import md5File from "md5-file"
 import path from "path"
-import { xxhash3 } from "hash-wasm"
 
 require("clarify")
 
 const gameHashes = {
-	"a9178a2e87a5a4673cb0560b1c3fc475": Platform.epic, // base game (cracked hash)
+	"e11846edebd8a841cefe444c7e42604a": Platform.epic, // base game (cracked hash)
 	"d508295266ba330c2e711ea0aebc1581": Platform.epic, // ansel unlock
 	//"09278760d4943ad21d04921169366d54": Platform.epic, // ansel no collision
 	//"a8752bc4b36a74600549778685db3b4c": Platform.epic, // ansel unlock + no collision
@@ -93,7 +92,7 @@ function toHuman(dur: Duration) {
 			.shiftTo(...units)
 			.normalize()
 			.toObject()
-	).filter(([_, amount], idx) => amount > 0 && idx <= smallestIdx)
+	).filter(([, amount], idx) => amount > 0 && idx <= smallestIdx)
 	return entries.map((a) => a[1] + a[0][0]).join("")
 }
 
