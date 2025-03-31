@@ -92,7 +92,7 @@ function toHuman(dur: Duration) {
 			.shiftTo(...units)
 			.normalize()
 			.toObject()
-	).filter(([, amount], idx) => amount > 0 && idx <= smallestIdx)
+	).filter(([_, amount], idx) => amount > 0 && idx <= smallestIdx)
 	return entries.map((a) => a[1] + a[0][0]).join("")
 }
 
