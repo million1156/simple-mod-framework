@@ -13,6 +13,7 @@ import discover from "./discover"
 import fs from "fs-extra"
 import md5File from "md5-file"
 import path from "path"
+import { xxhash3 } from "hash-wasm"
 
 require("clarify")
 
